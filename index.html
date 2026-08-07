@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Candidate comparison</title>
+<!-- Two side-by-side pages, in the left/right pane colours. Inline so there's
+     no second request and no extra route in the server. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='5' width='13' height='22' rx='2' fill='%234b8bd6'/%3E%3Crect x='17' y='5' width='13' height='22' rx='2' fill='%23d68b4b'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --line: #2c313b;
+    --ink: #e8eaee;
+    --dim: #969ba6;
+    --left: #4b8bd6;
+    --right: #d68b4b;
+    --good: #4caf7d;
+    --warn: #d6a44b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", Segoe UI, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ---- top bar ---- */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 16px; border-bottom: 1px solid var(--line);
+    background: var(--panel); flex: none;
+  }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: .2px; }
+  .phase { color: var(--dim); font-size: 12.5px; white-space: nowrap; }
+  .bar { flex: 1; height: 6px; background: #262a33; border-radius: 3px; overflow: hidden; min-width: 80px; }
+  .bar > i { display: block; height: 100%; background: var(--good); width: 0; transition: width .25s; }
+  header .spacer { flex: 1; }
+
+  button {
+    font: inherit; color: var(--ink); background: #262b34;
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 11px; cursor: pointer;
+  }
+  button:hover { background: #303642; }
+  button:active { transform: translateY(1px); }
+  button.ghost { background: transparent; color: var(--dim); }
+  button.ghost:hover { background: #262b34; color: var(--ink); }
+
+  /* ---- comparison view ---- */
+  #compare { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .panes { flex: 1; display: flex; gap: 2px; min-height: 0; background: var(--line); }
+  .pane { flex: 1 1 50%; display: flex; flex-direction: column; min-width: 0; background: var(--panel); }
+  .pane.grown { flex: 1 1 72%; }
+  .pane.shrunk { flex: 1 1 28%; }
+  .pane > .head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; border-bottom: 1px solid var(--line); flex: none;
+  }
+  .tag {
+    font-size: 11px; font-weight: 700; letter-spacing: .8px;
+    padding: 2px 7px; border-radius: 4px; color: #10131a;
+  }
+  .pane.l .tag { background: var(--left); }
+  .pane.r .tag { background: var(--right); }
+  .who { font-weight: 600; font-size: 14px; }
+  .who small { color: var(--dim); font-weight: 400; margin-left: 6px; }
+  .pane .head .spacer { flex: 1; }
+  .pane iframe { flex: 1; width: 100%; border: 0; background: #333; }
+
+  /* ---- choice bar ---- */
+  .choose {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);
+  }
+  .choose .pick {
+    font-size: 14px; font-weight: 600; padding: 9px 22px; border: 0; color: #10131a;
+  }
+  .pick.l { background: var(--left); }
+  .pick.r { background: var(--right); }
+  .pick:hover { filter: brightness(1.12); }
+  kbd {
+    font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(0,0,0,.28); border-radius: 3px; padding: 2px 4px; margin-left: 7px;
+  }
+  .choose .side { display: flex; gap: 8px; flex: 1; }
+  .choose .side.right { justify-content: flex-end; }
+
+  /* ---- results ---- */
+  #results { flex: 1; overflow: auto; padding: 28px 32px 60px; display: none; }
+  #results.on { display: block; }
+  #compare.off { display: none; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  #results h2 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin-bottom: 22px; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--dim); font-weight: 600; padding: 0 10px 8px; border-bottom: 1px solid var(--line);
+  }
+  th.n, td.n { text-align: right; }
+  td { padding: 11px 10px; border-bottom: 1px solid #23262e; vertical-align: middle; }
+  tr:hover td { background: #191c22; }
+  td.pos { font-size: 17px; font-weight: 700; color: var(--dim); width: 44px; }
+  td.who-cell a { color: var(--ink); font-weight: 600; text-decoration: none; }
+  td.who-cell a:hover { text-decoration: underline; }
+  td.who-cell small { display: block; color: var(--dim); font-weight: 400; font-size: 12px; }
+  .meter { display: flex; align-items: center; gap: 9px; }
+  .meter .track { flex: 1; height: 7px; background: #262a33; border-radius: 4px; overflow: hidden; min-width: 90px; }
+  .meter .track > i { display: block; height: 100%; background: var(--left); }
+  .meter span { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 12.5px; min-width: 40px; text-align: right; }
+  .gap { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .gap.firm { color: var(--good); }
+  .gap.soft { color: var(--warn); }
+  .note {
+    margin-top: 26px; padding: 14px 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; font-size: 13px; color: var(--dim);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note ul { margin: 8px 0 0; padding-left: 20px; }
+  .actions { margin-top: 24px; display: flex; gap: 10px; }
+  .loading { padding: 60px; text-align: center; color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Candidate comparison</h1>
+  <span class="phase" id="phase">loading…</span>
+  <div class="bar"><i id="progress"></i></div>
+  <span class="spacer"></span>
+  <button class="ghost" id="undo">Undo <kbd>U</kbd></button>
+  <button class="ghost" id="swap">Swap sides</button>
+  <button class="ghost" id="toResults">Ranking so far</button>
+</header>
+
+<div id="compare">
+  <div class="panes">
+    <div class="pane l" id="paneL">
+      <div class="head">
+        <span class="tag">LEFT</span>
+        <span class="who" id="nameL"></span>
+        <span class="spacer"></span>
+        <button class="ghost" data-expand="L">Widen</button>
+      </div>
+      <iframe id="pdfL" title="Left candidate"></iframe>
+    </div>
+    <div class="pane r" id="paneR">
+      <div class="head">
+        <span class="tag">RIGHT</span>
+        <span class="who" id="nameR"></span>
+        <span class="spacer"></span>
+        <button class="ghost" data-expand="R">Widen</button>
+      </div>
+      <iframe id="pdfR" title="Right candidate"></iframe>
+    </div>
+  </div>
+  <div class="choose">
+    <div class="side"><button class="pick l" id="pickL">◀ Prefer left<kbd>←</kbd></button></div>
+    <button id="pickTie">Too close to call<kbd>↓</kbd></button>
+    <div class="side right"><button class="pick r" id="pickR">Prefer right ▶<kbd>→</kbd></button></div>
+  </div>
+</div>
+
+<div id="results"><div class="wrap"><div class="loading">…</div></div></div>
+
+<script>
+'use strict';
+
+let S = null;                 // latest view model from the server
+let showingResults = false;
+let busy = false;
+
+const $ = id => document.getElementById(id);
+
+async function api(path, body) {
+  busy = true;
+  try {
+    const opts = body
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      : {};
+    S = await (await fetch(path, opts)).json();
+    render();
+  } finally {
+    busy = false;
+  }
+}
+
+// --- rendering ------------------------------------------------------------
+
+function render() {
+  if (!S) return;
+  $('phase').textContent = S.progress.label;
+  const pct = S.progress.total ? Math.min(100, 100 * S.progress.done / S.progress.total) : 0;
+  $('progress').style.width = pct + '%';
+  $('undo').disabled = S.comparisons === 0;
+
+  const done = S.finished || !S.next;
+  if (done && !showingResults) showingResults = true;
+
+  $('compare').classList.toggle('off', showingResults);
+  $('results').classList.toggle('on', showingResults);
+  $('toResults').textContent = showingResults
+    ? (done ? 'Review comparisons' : 'Back to comparing')
+    : 'Ranking so far';
+  $('toResults').style.display = (done && showingResults) ? 'none' : '';
+
+  if (showingResults) renderResults();
+  else renderCompare();
+}
+
+let shown = { a: null, b: null };
+
+function renderCompare() {
+  const { a, b } = S.next;
+  const A = S.candidates[a], B = S.candidates[b];
+  $('nameL').innerHTML = esc(A.name) + (A.ref ? ` <small>${esc(A.ref)}</small>` : '');
+  $('nameR').innerHTML = esc(B.name) + (B.ref ? ` <small>${esc(B.ref)}</small>` : '');
+
+  // Only reload the iframes when the candidate actually changes — reloading a
+  // 12 MB PDF you're already looking at would lose your scroll position.
+  if (shown.a !== A.file) { $('pdfL').src = pdfURL(A.file); shown.a = A.file; }
+  if (shown.b !== B.file) { $('pdfR').src = pdfURL(B.file); shown.b = B.file; }
+
+  $('paneL').className = 'pane l';
+  $('paneR').className = 'pane r';
+}
+
+const pdfURL = f => '/pdf/' + encodeURIComponent(f) + '#view=FitH&navpanes=0';
+
+function renderResults() {
+  const r = S.ranking;
+  const max = Math.max(...r.map(x => x.strength));
+  const settled = S.finished;
+  // Finishing can mean "confident enough" or "ran out of comparison budget" —
+  // don't claim the former when it was the latter.
+  const confident = S.min_confidence >= S.confidence_target;
+
+  let rows = r.map((c, i) => {
+    const w = Math.max(3, 100 * c.strength / max);
+    let gap = '';
+    if (c.conf_over_next !== null && c.conf_over_next !== undefined) {
+      const p = c.conf_over_next;
+      const cls = p >= S.confidence_target ? 'firm' : 'soft';
+      gap = `<span class="gap ${cls}">${Math.round(p * 100)}% sure over #${c.rank + 1}</span>`;
+    }
+    return `<tr>
+      <td class="pos">${c.rank}</td>
+      <td class="who-cell">
+        <a href="${pdfURL(c.file)}" target="_blank" rel="noopener">${esc(c.name)}</a>
+        <small>${esc(c.ref)}</small>
+      </td>
+      <td><div class="meter"><div class="track"><i style="width:${w}%"></i></div><span>${c.score}</span></div></td>
+      <td class="n">${c.w}–${c.l}${c.t ? '–' + c.t : ''}</td>
+      <td>${gap}</td>
+    </tr>`;
+  }).join('');
+
+  const cyc = S.cycles.length
+    ? `<li><b>${S.cycles.length}</b> of ${S.total_triads} triples are circular
+        (${S.cycles.map(c => esc(c.join(' &gt; ')) + ' &gt; ' + esc(c[0])).join('; ')}).
+        Normal for human judgement — Bradley–Terry absorbs it by placing those candidates close together.</li>`
+    : `<li>No circular preferences: every triple of candidates you judged is internally consistent.</li>`;
+
+  $('results').firstElementChild.innerHTML = `
+    <h2>${settled ? 'Final ranking' : 'Ranking so far'}</h2>
+    <p class="sub">
+      ${S.comparisons} comparison${S.comparisons === 1 ? '' : 's'} ·
+      Bradley–Terry maximum likelihood ·
+      ${confident
+        ? `every adjacent pair separated with ≥${Math.round(S.confidence_target * 100)}% bootstrap confidence`
+        : `weakest adjacent separation ${Math.round(S.min_confidence * 100)}%`}
+    </p>
+    ${settled && !confident ? `<div class="note" style="margin:0 0 22px">
+      <b>Not fully separated.</b> Comparisons ran out before every adjacent pair reached
+      ${Math.round(S.confidence_target * 100)}% confidence — the candidates marked in amber below are
+      genuinely close on your own judgements. Run more comparisons to try to split them, or treat
+      them as a band rather than an order.</div>` : ''}
+    <table>
+      <thead><tr>
+        <th></th><th>Candidate</th><th>Strength</th><th class="n">W–L</th><th>Separation</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="note">
+      <b>How to read this.</b>
+      <ul>
+        <li><b>Strength</b> is an Elo-style score: +400 means the model expects that candidate to be
+          preferred over the other roughly 10 times out of 11. Bar length is relative strength.</li>
+        <li><b>Separation</b> is how often a bootstrap resample of your own comparisons reproduces
+          that ordering. Below ${Math.round(S.confidence_target * 100)}% means those two are
+          effectively tied on the evidence so far.</li>
+        ${cyc}
+      </ul>
+    </div>
+    <div class="actions">
+      ${settled ? '<button id="more">Run more comparisons</button>' : '<button id="back">Back to comparing</button>'}
+      <button class="ghost" id="copy">Copy ranking</button>
+      <button class="ghost" id="reset">Start over</button>
+    </div>`;
+
+  const more = $('more'), back = $('back');
+  if (more) more.onclick = () => { showingResults = false; api('/api/more', {}); };
+  if (back) back.onclick = () => { showingResults = false; render(); };
+  $('copy').onclick = copyRanking;
+  $('reset').onclick = () => {
+    if (confirm('Discard all comparisons and start over?')) {
+      showingResults = false;
+      shown = { a: null, b: null };
+      api('/api/reset', {});
+    }
+  };
+}
+
+function copyRanking() {
+  const text = S.ranking
+    .map(c => `${c.rank}. ${c.name}${c.ref ? ' (' + c.ref + ')' : ''} — score ${c.score}, ${c.w}W ${c.l}L${c.t ? ' ' + c.t + 'T' : ''}`)
+    .join('\n');
+  navigator.clipboard.writeText(
+    text + `\n\nBased on ${S.comparisons} pairwise comparisons (Bradley–Terry).`
+  );
+  $('copy').textContent = 'Copied';
+  setTimeout(() => { const b = $('copy'); if (b) b.textContent = 'Copy ranking'; }, 1400);
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// --- actions --------------------------------------------------------------
+
+function choose(result) {
+  if (busy || showingResults || !S || !S.next) return;
+  api('/api/choose', { a: S.next.a, b: S.next.b, result });
+}
+
+$('pickL').onclick = () => choose('a');
+$('pickR').onclick = () => choose('b');
+$('pickTie').onclick = () => choose('tie');
+$('undo').onclick = () => { showingResults = false; api('/api/undo', {}); };
+
+$('toResults').onclick = () => { showingResults = !showingResults; render(); };
+
+$('swap').onclick = () => {
+  if (!S || !S.next) return;
+  S.next = { a: S.next.b, b: S.next.a };
+  shown = { a: null, b: null };
+  render();
+};
+
+document.querySelectorAll('[data-expand]').forEach(btn => {
+  btn.onclick = () => {
+    const side = btn.dataset.expand;
+    const L = $('paneL'), R = $('paneR');
+    const grown = side === 'L' ? L : R, other = side === 'L' ? R : L;
+    const already = grown.classList.contains('grown');
+    L.className = 'pane l'; R.className = 'pane r';
+    if (!already) { grown.classList.add('grown'); other.classList.add('shrunk'); }
+    btn.textContent = already ? 'Widen' : 'Widen';
+  };
+});
+
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'ArrowLeft') { e.preventDefault(); choose('a'); }
+  else if (k === 'ArrowRight') { e.preventDefault(); choose('b'); }
+  else if (k === 'ArrowDown') { e.preventDefault(); choose('tie'); }
+  else if (k === 'u' || k === 'U') { e.preventDefault(); $('undo').click(); }
+});
+
+api('/api/state');
+</script>
+</body>
+</html>
