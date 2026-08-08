@@ -4,6 +4,10 @@ A local-only web app for ranking job applicants. It shows two candidate PDFs
 side by side, asks which you prefer, and builds a ranking from your answers.
 Nothing is uploaded anywhere.
 
+<a href="screenshot.png">
+  <img src="screenshot.png" alt="Screenshot of candidate comparison" width="700">
+</a>
+
 ## The brief
 
 This project was built from a conversation rather than a spec. The requests are
